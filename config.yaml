@@ -1,0 +1,11 @@
+apis:
+  - name: open-meteo
+    base_url: https://api.open-meteo.com
+    limit: 10000
+    window_seconds: 86400
+    window_type: fixed
+    alert_threshold: 0.8
+
+redis_url: redis://localhost:6379
+sse_interval: 1.0
+key_prefix: ratewatch
