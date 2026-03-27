@@ -2,20 +2,18 @@ from typing import Annotated
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from ratewatch.config import get_config
 from ratewatch.models.config import AppConfig
 
 
-def get_redis() -> aioredis.Redis:
-    config = get_config()
-    return aioredis.from_url(config.redis_url, decode_responses=True)
+def get_redis(request: Request) -> aioredis.Redis:
+    return request.app.state.redis
 
 
-async def get_proxy_client() -> httpx.AsyncClient:
-    async with httpx.AsyncClient() as client:
-        yield client
+def get_proxy_client(request: Request) -> httpx.AsyncClient:
+    return request.app.state.http_client
 
 
 # Type aliases for cleaner router signatures

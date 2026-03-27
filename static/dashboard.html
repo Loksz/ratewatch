@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ratewatch — Monitor de Límites de API</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span {
+      color: #60a5fa;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+
+    #status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #1e293b;
+      border: 1px solid #334155;
+      transition: all 0.3s;
+    }
+
+    #status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+      transition: background 0.3s;
+    }
+
+    #status-badge.connected .dot { background: #34d399; animation: pulse 2s infinite; }
+    #status-badge.reconnecting .dot { background: #f59e0b; }
+    #status-badge.connected { border-color: #34d399; color: #34d399; }
+    #status-badge.reconnecting { border-color: #f59e0b; color: #f59e0b; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead tr {
+      background: #0f172a;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      color: #64748b;
+    }
+
+    th, td {
+      padding: 0.85rem 1.25rem;
+      text-align: left;
+    }
+
+    tbody tr {
+      border-top: 1px solid #1e293b;
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover { background: #263348; }
+
+    .api-name {
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    .count {
+      font-variant-numeric: tabular-nums;
+      color: #94a3b8;
+    }
+
+    .count strong {
+      color: #e2e8f0;
+    }
+
+    .progress-wrap {
+      min-width: 120px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      border-radius: 9999px;
+      background: #1e293b;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.4s ease, background 0.4s ease;
+    }
+
+    .progress-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .badge-OK       { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
+    .badge-WARNING  { background: #451a03; color: #fb923c; border: 1px solid #7c2d12; }
+    .badge-CRITICAL { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .badge-EXHAUSTED{ background: #18181b; color: #a1a1aa; border: 1px solid #3f3f46; }
+
+    .fill-OK       { background: #34d399; }
+    .fill-WARNING  { background: #fb923c; }
+    .fill-CRITICAL { background: #f87171; }
+    .fill-EXHAUSTED{ background: #52525b; }
+
+    .reset {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: #475569;
+      font-size: 0.875rem;
+    }
+
+    #last-update {
+      font-size: 0.75rem;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Rate<span>watch</span></h1>
+  <div class="meta">
+    <span id="last-update">Sin datos</span>
+    <span id="status-badge">
+      <span class="dot"></span>
+      <span id="status-text">Conectando...</span>
+    </span>
+  </div>
+</header>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>API</th>
+        <th>Uso actual</th>
+        <th>Progreso</th>
+        <th>Estado</th>
+        <th>Reset en</th>
+      </tr>
+    </thead>
+    <tbody id="api-rows">
+      <tr id="empty-state">
+        <td colspan="5">Esperando datos del servidor...</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const badge = document.getElementById('status-badge');
+  const statusText = document.getElementById('status-text');
+  const lastUpdate = document.getElementById('last-update');
+  const tbody = document.getElementById('api-rows');
+
+  function setStatus(state) {
+    badge.className = state;
+    statusText.textContent = state === 'connected' ? 'Conectado' : 'Reconectando...';
+  }
+
+  function formatReset(seconds) {
+    if (seconds == null) return '—';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  }
+
+  function renderRows(apis) {
+    if (!apis || apis.length === 0) return;
+
+    tbody.innerHTML = apis.map(api => {
+      const pct = Math.min(api.usage_percent, 100);
+      return `
+        <tr>
+          <td class="api-name">${api.api_name}</td>
+          <td class="count"><strong>${api.current_count}</strong> / ${api.limit}</td>
+          <td class="progress-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill fill-${api.status}" style="width:${pct}%"></div>
+            </div>
+            <div class="progress-label">${api.usage_percent.toFixed(1)}% — ${api.remaining} restantes</div>
+          </td>
+          <td><span class="badge badge-${api.status}">${api.status}</span></td>
+          <td class="reset">${formatReset(api.reset_in_seconds)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function connect() {
+    const es = new EventSource('/events');
+
+    es.onopen = () => setStatus('connected');
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        renderRows(data.apis);
+        lastUpdate.textContent = `Actualizado: ${new Date().toLocaleTimeString()}`;
+      } catch (_) {}
+    };
+
+    es.onerror = () => {
+      setStatus('reconnecting');
+      es.close();
+      setTimeout(connect, 3000);
+    };
+  }
+
+  connect();
+</script>
+</body>
+</html>
